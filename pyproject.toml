@@ -45,7 +45,7 @@ benchmark = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/strands-agents/strands-aerospike"
+Homepage = "https://github.com/aerospike/strands-aerospike"
 Documentation = "https://strandsagents.com"
 
 [tool.hatch.build.targets.wheel]
