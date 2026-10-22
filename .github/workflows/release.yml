@@ -1,7 +1,8 @@
 name: Release
 
-# Builds, GPG-signs, and deploys the sdist and wheel to JFrog via aerospike/shared-workflows.
-# Pull requests run the same pipeline in dry-run mode (nothing is uploaded).
+# Builds, GPG-signs, and deploys the sdist and wheel to JFrog via aerospike/shared-workflows,
+# then creates a release bundle and promotes it to DEV and TEST.
+# Pull requests run the same pipeline in dry-run mode (nothing is uploaded or promoted).
 # A v* tag performs the real deploy; the tag must match the version in pyproject.toml.
 
 on:
@@ -44,7 +45,7 @@ jobs:
 
       - name: Extract version
         id: extract
-        uses: aerospike/shared-workflows/.github/actions/extract-version-from-tag@v5.0.0
+        uses: aerospike/shared-workflows/.github/actions/extract-version-from-tag@f7d1ce30b376733a51ea05b99f20646d0e248afc # unreleased main after v5.0.0
         with:
           version: ${{ inputs.version }}
 
@@ -60,13 +61,14 @@ jobs:
           fi
     outputs:
       version: ${{ steps.extract.outputs.version }}
+      dry-run: ${{ github.event_name == 'pull_request' || inputs.dry-run == true }}
 
   artifacts-cicd:
     needs: extract-version
-    uses: aerospike/shared-workflows/.github/workflows/reusable_artifacts-cicd.yaml@v5.0.0
+    uses: aerospike/shared-workflows/.github/workflows/reusable_artifacts-cicd.yaml@f7d1ce30b376733a51ea05b99f20646d0e248afc # unreleased main after v5.0.0
     with:
-      gh-workflows-ref: v5.0.0 # must match the @ref above
-      jf-project: vector
+      gh-workflows-ref: f7d1ce30b376733a51ea05b99f20646d0e248afc # must match the @ref above
+      jf-project: database
       jf-build-name: strands-aerospike
       version: ${{ needs.extract-version.outputs.version }}
       gh-artifact-directory: output
@@ -78,8 +80,41 @@ jobs:
         ]}
       oidc-provider-name: gh-aerospike
       oidc-audience: aerospike
-      dry-run: ${{ github.event_name == 'pull_request' || inputs.dry-run == true }}
+      dry-run: ${{ needs.extract-version.outputs.dry-run == 'true' }}
     secrets:
       gpg-private-key: ${{ secrets.GPG_SECRET_KEY }}
       gpg-public-key: ${{ secrets.GPG_PUBLIC_KEY }}
       gpg-key-pass: ${{ secrets.GPG_PASS }}
+
+  create-release-bundle:
+    needs: [extract-version, artifacts-cicd]
+    uses: aerospike/shared-workflows/.github/workflows/reusable_create-release-bundle.yaml@f7d1ce30b376733a51ea05b99f20646d0e248afc # unreleased main after v5.0.0
+    with:
+      gh-workflows-ref: f7d1ce30b376733a51ea05b99f20646d0e248afc # must match the @ref above
+      jf-project: database
+      jf-build-names: ${{ needs.artifacts-cicd.outputs.jf-build-name }}:${{ needs.artifacts-cicd.outputs.jf-build-id }}
+      jf-bundle-name: strands-aerospike
+      version: ${{ needs.extract-version.outputs.version }}
+      jf-bundle-revision: auto
+      dry-run: ${{ needs.extract-version.outputs.dry-run == 'true' }}
+
+  promote-dev:
+    needs: [extract-version, create-release-bundle]
+    if: needs.extract-version.outputs.dry-run == 'false'
+    uses: aerospike/shared-workflows/.github/workflows/reusable_promote-release-bundle.yaml@f7d1ce30b376733a51ea05b99f20646d0e248afc # unreleased main after v5.0.0
+    with:
+      gh-workflows-ref: f7d1ce30b376733a51ea05b99f20646d0e248afc # must match the @ref above
+      jf-project: database
+      jf-bundle-name: strands-aerospike
+      version: ${{ needs.create-release-bundle.outputs.bundle-version }}
+      target-stage: DEV
+
+  promote-test:
+    needs: [create-release-bundle, promote-dev]
+    uses: aerospike/shared-workflows/.github/workflows/reusable_promote-release-bundle.yaml@f7d1ce30b376733a51ea05b99f20646d0e248afc # unreleased main after v5.0.0
+    with:
+      gh-workflows-ref: f7d1ce30b376733a51ea05b99f20646d0e248afc # must match the @ref above
+      jf-project: database
+      jf-bundle-name: strands-aerospike
+      version: ${{ needs.create-release-bundle.outputs.bundle-version }}
+      target-stage: TEST
