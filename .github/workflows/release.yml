@@ -45,7 +45,7 @@ jobs:
 
       - name: Extract version
         id: extract
-        uses: aerospike/shared-workflows/.github/actions/extract-version-from-tag@f7d1ce30b376733a51ea05b99f20646d0e248afc # unreleased main after v5.0.0
+        uses: aerospike/shared-workflows/.github/actions/extract-version-from-tag@39b94aea7c29ee73ee97ea079f16936b474cad6e # unreleased main after v5.0.0
         with:
           version: ${{ inputs.version }}
 
